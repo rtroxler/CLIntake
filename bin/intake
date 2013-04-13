@@ -1,0 +1,171 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require "bundler/setup"
+require 'commander/import'
+require 'sequel'
+
+program :name, "Intake"
+program :version, '1.0.0'
+program :description, 'A simple command line based macro manager'
+
+config_dir = File.expand_path('~/.intake')
+unless Dir[config_dir].length > 0
+    Dir::mkdir(config_dir)
+end
+
+DB = Sequel.sqlite("#{config_dir}/intake.db")
+
+unless DB.table_exists? :food
+    DB.create_table(:food) do
+        primary_key :id
+        String :name
+        Integer :fat
+        Integer :carbs
+        Integer :protein
+    end
+end
+
+unless DB.table_exists? :intake
+    DB.create_table(:intake) do
+        primary_key :id
+        DateTime :date
+        Integer :dailyfat
+        Integer :dailycarb
+        Integer :dailyprotein
+    end
+end
+    
+df = DB[:food]
+di = DB[:intake]
+
+command :ate do |c|
+    c.syntax = 'intake ate <food>'
+    c.description = 'Records a food eaten'
+    c.action do |args, options|
+        if args.first.nil?
+            puts 'Please specify food eaten.'
+        else
+            foodname = args.first
+            food = df.where(:name => foodname)
+            #if food doesn't exist, take in name and split up macros
+            if food.count == 0 
+                macros = ask("What are #{foodname}'s macros?")
+                #NEED TO VALIDATE THIS, OR ADD - to split
+                fat,carbs,protein = macros.split("/")
+                df.insert(:name => foodname, :fat => fat, :carbs => carbs, :protein => protein)
+            end
+            df.where(:name => foodname).each do |food|
+                fat = food[:fat] 
+                carbs = food[:carbs]
+                protein = food[:protein]
+            end
+
+            #This is fucking nasty. I need to find a better way for Ruby to do this.
+            today = false
+            di.where(:date => DateTime.now.to_date).each do |t|
+                if t[:date].nil?
+                    today = false
+                else
+                    today = true
+                end
+            end
+
+            #if today exists, add the inserted values to the already existing ones in the database.
+            unless !today 
+                di.where(:date => DateTime.now.to_date).each do |today|
+                    dailyfat = today[:dailyfat].to_i + fat  
+                    dailycarbs = today[:dailycarb].to_i + carbs
+                    dailyprotein = today[:dailyprotein].to_i + protein
+                    new = di.where(:date => DateTime.now.to_date)
+                    new.update(:dailyfat => dailyfat, :dailycarb => dailycarbs, :dailyprotein => dailyprotein)
+                end
+
+            #if today doesn't exist, create a new date and insert values
+            else
+                di.insert(:date => DateTime.now.to_date, :dailyfat => fat, :dailycarb => carbs, :dailyprotein => protein)
+            end
+
+            #print out the daily intake to finish.
+            di.where(:date => DateTime.now.to_date).each do |today|
+                puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
+            end
+        end
+    end
+end
+
+###
+#Clears the days intake
+#Mostly used for debugging
+###
+command :clear do |c|
+    c.syntax = 'intake clear'
+    c.description = 'Clears everything'
+    c.action do |args, options|
+        items = di.where(:date => DateTime.now.to_date)
+        if items.count > 0
+            items.delete
+        end
+        puts "Deleted."
+    end
+end
+
+###
+#Lists the food in the database
+###
+command :list do |c|
+    c.syntax = 'intake list'
+    c.description = 'Lists food.'
+    c.action do |args, options|
+        df.each do |food|
+            puts "Food = #{food[:name]}, #{food[:fat]} / #{food[:carbs]} / #{food[:protein]} "
+        end
+    end
+end
+
+###
+#Removes a food in the database
+###
+command :remove do |c|
+    c.syntax = 'intake remove <food>'
+    c.description = 'Removes food by name.'
+    c.action do |args, options|
+        if args.first.nil?
+            puts 'Please specify the food to be deleted.'
+        else
+            items = df.where(:name => args.first)
+            if items.count > 0
+                items.delete
+                puts "Deleted."
+            else
+                puts "No food found by that name."
+            end
+        end
+    end
+end
+
+
+command :today do |c|
+    c.syntax = 'intake today'
+    c.description = 'Lists todays intake.'
+    c.action do |args, options|
+        di.where(:date => DateTime.now.to_date).each do |today|
+            puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
+        end
+    end
+end
+
+
+command :add do |c|
+    c.syntax = 'intake add <food>'
+    c.description = 'Adds a food to DB.'
+    c.action do |args, options|
+        if args.first.nil?
+            puts 'Please specify food eaten.'
+        else
+            foodname = args.first
+            macros = ask("What's #{foodname}'s macros?")
+            fat,carbs,protein = macros.split("/")
+            df.insert(:name => foodname, :fat => fat, :carbs => carbs, :protein => protein)
+        end
+    end
+end
