@@ -8,6 +8,11 @@ program :name, "Intake"
 program :version, '1.0.0'
 program :description, 'A simple command line based macro manager'
 
+targetFat = 85
+targetCarbs = 130
+targetProtein = 150
+targetCals = 1850
+
 config_dir = File.expand_path('~/.intake')
 unless Dir[config_dir].length > 0
     Dir::mkdir(config_dir)
@@ -88,6 +93,10 @@ command :ate do |c|
             #print out the daily intake to finish.
             di.where(:date => DateTime.now.to_date).each do |today|
                 puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
+                puts "Macros remaining : #{targetFat - today[:dailyfat]} / #{targetCarbs - today[:dailycarb]} / #{targetProtein - today[:dailyprotein]}"
+                cals = (9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])
+                puts "Calories : #{(9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])}"
+                puts "Target cals : #{targetCals}"
             end
         end
     end
@@ -116,8 +125,14 @@ command :list do |c|
     c.syntax = 'intake list'
     c.description = 'Lists food.'
     c.action do |args, options|
-        df.each do |food|
-            puts "Food = #{food[:name]}, #{food[:fat]} / #{food[:carbs]} / #{food[:protein]} "
+        if args.first.nil?
+            df.each do |food|
+                puts "Food = #{food[:name]}, #{food[:fat]} / #{food[:carbs]} / #{food[:protein]} "
+            end
+        else
+            df.where(:name => args.first).each  do |item|
+                puts "Food = #{item[:name]}, #{item[:fat]} / #{item[:carbs]} / #{item[:protein]}"
+            end
         end
     end
 end
@@ -150,6 +165,8 @@ command :today do |c|
     c.action do |args, options|
         di.where(:date => DateTime.now.to_date).each do |today|
             puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
+            puts "Macros remaining : #{targetFat - today[:dailyfat]} / #{targetCarbs - today[:dailycarb]} / #{targetProtein- today[:dailyprotein]}"
+            puts "Calories : #{(9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])}"
         end
     end
 end
