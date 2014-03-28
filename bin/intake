@@ -8,11 +8,6 @@ program :name, "Intake"
 program :version, '1.0.0'
 program :description, 'A simple command line based macro manager'
 
-targetFat = 85
-targetCarbs = 130
-targetProtein = 150
-targetCals = 1850
-
 config_dir = File.expand_path('~/.intake')
 unless Dir[config_dir].length > 0
     Dir::mkdir(config_dir)
@@ -39,9 +34,30 @@ unless DB.table_exists? :intake
         Integer :dailyprotein
     end
 end
+
     
 df = DB[:food]
 di = DB[:intake]
+
+command :set do |c|
+    c.syntax = 'intake set <target>'
+    c.description = 'Set new target macro goals.'
+    c.action do |args, options|
+        if args.first.nil?
+            puts 'You did not provide target goals.'
+        else
+            fat,carbs,protein = args.first.split("/")
+            target = df.where(:name => "target")
+            if target.count == 0
+                df.insert(:name => "target", :fat => fat, :carbs => carbs, :protein => protein)
+            end
+            df.where(:name => "target").each do |target|
+                target.update(:fat => fat, :carbs => carbs, :protein => protein)
+                puts "Updated target goals: #{target[:fat]}/#{target[:carbs]}/#{target[:protein]}"
+            end
+        end
+    end
+end
 
 command :ate do |c|
     c.syntax = 'intake ate <food>'
@@ -91,12 +107,18 @@ command :ate do |c|
             end
 
             #print out the daily intake to finish.
-            di.where(:date => DateTime.now.to_date).each do |today|
-                puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
-                puts "Macros remaining : #{targetFat - today[:dailyfat]} / #{targetCarbs - today[:dailycarb]} / #{targetProtein - today[:dailyprotein]}"
-                cals = (9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])
-                puts "Calories : #{(9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])}"
-                puts "Target cals : #{targetCals}"
+            df.where(:name => "target").each do |target|
+                di.where(:date => DateTime.now.to_date).each do |today|
+                    puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
+                    puts "Macros remaining : #{target[:fat] - today[:dailyfat]} / #{target[:carbs] - today[:dailycarb]} / #{target[:protein] - today[:dailyprotein]}"
+                    cals = (9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])
+                    f = target[:fat]
+                    c = target[:carbs]
+                    p = target[:protein]
+                    targetCals = (9*f)+(4*c)+(4*p)
+                    puts "Calories : #{(9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])}"
+                    puts "Target cals : #{targetCals}"
+                end
             end
         end
     end
@@ -127,7 +149,9 @@ command :list do |c|
     c.action do |args, options|
         if args.first.nil?
             df.each do |food|
-                puts "Food = #{food[:name]}, #{food[:fat]} / #{food[:carbs]} / #{food[:protein]} "
+                if food[:name] != 'target'
+                    puts "Food = #{food[:name]}, #{food[:fat]} / #{food[:carbs]} / #{food[:protein]} "
+                end
             end
         else
             df.where(:name => args.first).each  do |item|
@@ -163,10 +187,17 @@ command :today do |c|
     c.syntax = 'intake today'
     c.description = 'Lists todays intake.'
     c.action do |args, options|
-        di.where(:date => DateTime.now.to_date).each do |today|
-            puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
-            puts "Macros remaining : #{targetFat - today[:dailyfat]} / #{targetCarbs - today[:dailycarb]} / #{targetProtein- today[:dailyprotein]}"
-            puts "Calories : #{(9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])}"
+        df.where(:name => "target").each do |target|
+            di.where(:date => DateTime.now.to_date).each do |today|
+                puts "Daily intake : #{today[:dailyfat]} / #{today[:dailycarb]} / #{today[:dailyprotein]}"
+                puts "Macros remaining : #{target[:fat] - today[:dailyfat]} / #{target[:carbs] - today[:dailycarb]} / #{target[:protein] - today[:dailyprotein]}"
+                puts "Calories : #{(9*today[:dailyfat]) + (4*today[:dailycarb])+(4*today[:dailyprotein])}"
+                f = target[:fat]
+                c = target[:carbs]
+                p = target[:protein]
+                targetCals = (9*f)+(4*c)+(4*p)
+                puts "Target Cals : #{targetCals}"
+            end
         end
     end
 end
@@ -186,3 +217,5 @@ command :add do |c|
         end
     end
 end
+
+
